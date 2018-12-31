@@ -1,6 +1,9 @@
 package projects.yaseen.sg_mobiledata_usage;
 
 import android.os.Handler;
+import android.support.design.widget.CoordinatorLayout;
+import android.support.design.widget.Snackbar;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.DividerItemDecoration;
@@ -36,6 +39,9 @@ public class MainActivity extends AppCompatActivity {
     @BindView(R.id.recycler_view)
     RecyclerView mRecylcerView;
 
+    @BindView(R.id.coordinatorlayout)
+    CoordinatorLayout mCoordinatorLayout;
+
     ApiClient apiService;
 
     boolean isAnimating = true;
@@ -49,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
-        apiService = ServiceGenerator.createService(ApiClient.class);
+        apiService = ServiceGenerator.createService(ApiClient.class,this);
 
         mRecylcerView.setLayoutManager(new LinearLayoutManager(this));
         mAdapter = new MobileUsageAdapter(mDataUsageList, this);
@@ -74,59 +80,84 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<DataUsageResponse> call, Response<DataUsageResponse> response) {
 
-                List<DataUsageResponse.Results.QuarterUsageRecord> resultList = response.body().getData().getRecordList();
+                if (response.isSuccessful() && response.code()==200) {
 
-                for (DataUsageResponse.Results.QuarterUsageRecord record : resultList) {
+                    List<DataUsageResponse.Results.QuarterUsageRecord> resultList = response.body().getData().getRecordList();
 
-                    String[] parts = record.getQuarter().split("-");
+                    for (DataUsageResponse.Results.QuarterUsageRecord record : resultList) {
 
-                    try {
-                        int year = Integer.parseInt(parts[0]);
-                        String quarter = parts[1];
+                        String[] parts = record.getQuarter().split("-");
 
-                        if (year > 2007) {
+                        try {
+                            int year = Integer.parseInt(parts[0]);
+                            String quarter = parts[1];
 
-                            YearDataUsage yearDataUsage = new YearDataUsage();
-                            yearDataUsage.setYear(year);
+                            if (year > 2007) {
 
-                            QuarterUsage quarterUsage = new QuarterUsage();
-                            quarterUsage.setQuarter(quarter);
-                            quarterUsage.setUsage(Double.parseDouble(record.getDataVolume()));
-                            yearDataUsage.setDataForQuarter(quarter, quarterUsage);
+                                YearDataUsage yearDataUsage = new YearDataUsage();
+                                yearDataUsage.setYear(year);
 
-                            boolean isExists = false;
-                            for (YearDataUsage yearRecord : mDataUsageList) {
-                                if (yearRecord.getYear() == year) {
-                                    isExists = true;
-                                    yearRecord.setDataForQuarter(quarter, quarterUsage);
+                                QuarterUsage quarterUsage = new QuarterUsage();
+                                quarterUsage.setQuarter(quarter);
+                                quarterUsage.setUsage(Double.parseDouble(record.getDataVolume()));
+                                yearDataUsage.setDataForQuarter(quarter, quarterUsage);
+
+                                boolean isExists = false;
+                                for (YearDataUsage yearRecord : mDataUsageList) {
+                                    if (yearRecord.getYear() == year) {
+                                        isExists = true;
+                                        yearRecord.setDataForQuarter(quarter, quarterUsage);
+                                    }
                                 }
+
+                                if (!isExists) {
+                                    mDataUsageList.add(yearDataUsage);
+                                }
+
                             }
 
-                            if (!isExists) {
-                                mDataUsageList.add(yearDataUsage);
-                            }
+                        } catch (NumberFormatException e) {
+
+                        } catch (IllegalArgumentException e) {
 
                         }
 
-                    } catch (NumberFormatException e) {
-
-                    } catch (IllegalArgumentException e) {
-
                     }
 
+                    mAdapter.notifyDataSetChanged();
+
+
+                    toggleanimation();
+                }else {
+                    final Snackbar snackbar = Snackbar
+                            .make(mCoordinatorLayout, "Something went wrong try again", Snackbar.LENGTH_INDEFINITE)
+                            .setAction("RETRY", new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    getMobileUsageData();
+                                }
+                            }).setActionTextColor(ContextCompat.getColor(MainActivity.this, R.color.colorPrimaryDark));
+                    View snackbarView = snackbar.getView();
+                    snackbarView.setBackgroundColor(ContextCompat.getColor(MainActivity.this, R.color.data_usage_low));
+                    snackbar.show();
                 }
-
-                mAdapter.notifyDataSetChanged();
-
-
-                toggleanimation();
 
             }
 
             @Override
             public void onFailure(Call<DataUsageResponse> call, Throwable t) {
-
                 toggleanimation();
+                final Snackbar snackbar = Snackbar
+                        .make(mCoordinatorLayout, t.getMessage(), Snackbar.LENGTH_INDEFINITE)
+                        .setAction("RETRY", new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                getMobileUsageData();
+                            }
+                        }).setActionTextColor(ContextCompat.getColor(MainActivity.this, R.color.colorPrimaryDark));
+                View snackbarView = snackbar.getView();
+                snackbarView.setBackgroundColor(ContextCompat.getColor(MainActivity.this, R.color.data_usage_low));
+                snackbar.show();
             }
         });
     }
